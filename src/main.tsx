@@ -1,0 +1,397 @@
+import React, { useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
+import {
+  applyCommand,
+  exportDocument,
+  importDocument,
+  validateSamples,
+} from "./model.ts";
+import type { ModelDocument } from "./model.ts";
+import { Canvas } from "./Canvas.tsx";
+import { Inspector } from "./Inspector.tsx";
+import { SampleEditor } from "./SampleEditor.tsx";
+import { makeId } from "./ui.ts";
+import type { Dispatch } from "./ui.ts";
+import { loadLocal, saveLocal } from "./storage.ts";
+import "./style.css";
+
+const example = JSON.stringify(
+  {
+    type: "addField",
+    entityId: "project",
+    field: {
+      id: "project_notes",
+      name: "Notes",
+      type: "string",
+      required: false,
+    },
+  },
+  null,
+  2,
+);
+function boot() {
+  try {
+    return loadLocal(window.localStorage);
+  } catch {
+    return loadLocal({
+      getItem() {
+        throw new Error("Storage unavailable");
+      },
+      setItem() {},
+    });
+  }
+}
+
+function App() {
+  const [initial] = useState(boot);
+  const [document, setDocument] = useState(initial.document);
+  const current = useRef(document);
+  const [selected, setSelected] = useState(
+    document.model.entities[0]?.id ?? "",
+  );
+  const [message, setMessage] = useState(initial.message);
+  const [commandJson, setCommandJson] = useState(example);
+  const [tab, setTab] = useState<"samples" | "commands">("samples");
+  const [dirty, setDirty] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const diagnostics = validateSamples(document);
+  const entity = document.model.entities.find((e) => e.id === selected);
+  const replace = (next: ModelDocument) => {
+    current.current = next;
+    setDocument(next);
+    setDirty(true);
+  };
+  const dispatch: Dispatch = (command) => {
+    const result = applyCommand(current.current, command);
+    if (!result.ok) {
+      setMessage(`Command rejected: ${result.error}`);
+      return false;
+    }
+    replace(result.document);
+    setMessage(`Applied ${command.type}.`);
+    return true;
+  };
+  const applyJson = () => {
+    try {
+      const result = applyCommand(current.current, JSON.parse(commandJson));
+      if (!result.ok) {
+        setMessage(`Command rejected: ${result.error}`);
+        return;
+      }
+      replace(result.document);
+      setRevision((r) => r + 1);
+      setMessage("JSON command applied through the shared command API.");
+    } catch {
+      setMessage("Invalid command JSON. Current document preserved.");
+    }
+  };
+  const download = () => {
+    const blob = new Blob([exportDocument(current.current)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = window.document.createElement("a");
+    link.href = url;
+    link.download = "model-canvas.json";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setMessage(
+      "JSON exported. Resolve missing sample references before importing it.",
+    );
+  };
+  const readFile = async (file: File | undefined) => {
+    if (!file) return;
+    const before = current.current;
+    try {
+      const result = importDocument(await file.text());
+      if (!result.ok) {
+        setMessage(
+          `Import rejected: ${result.error} Current document preserved.`,
+        );
+        return;
+      }
+      if (current.current !== before) {
+        setMessage(
+          "Document changed while reading the file. Import again to avoid losing those changes.",
+        );
+        return;
+      }
+      replace(result.document);
+      setSelected(result.document.model.entities[0]?.id ?? "");
+      setRevision((r) => r + 1);
+      setMessage("Imported document and layout. Save locally to keep it.");
+    } catch {
+      setMessage("Could not read the file. Current document preserved.");
+    }
+  };
+  const save = () => {
+    try {
+      const status = saveLocal(window.localStorage, current.current);
+      setMessage(status);
+      if (status === "Saved in this browser.") setDirty(false);
+    } catch {
+      setMessage("Local save failed. Export JSON to keep a copy.");
+    }
+  };
+  return (
+    <>
+      <header className="app-header">
+        <div className="brand">
+          <span className="brand-icon">◈</span>
+          <div>
+            Model Canvas<small>A small studio for big ideas</small>
+          </div>
+        </div>
+        <div className="header-actions">
+          <span className="local-badge">
+            <i /> Local demo
+          </span>
+          <button onClick={() => fileInput.current?.click()}>
+            Import JSON
+          </button>
+          <button onClick={download}>Export JSON</button>
+          <button className="primary" onClick={save}>
+            Save locally{dirty ? " •" : ""}
+          </button>
+        </div>
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".json,application/json"
+          aria-label="Import document"
+          className="file-input"
+          onChange={(event) => {
+            void readFile(event.target.files?.[0]);
+            event.target.value = "";
+          }}
+        />
+      </header>
+      <div className="workspace-bar">
+        <div>
+          <span className="eyebrow">WORKSPACE / FICTIONAL EXAMPLE</span>
+          <h1>Customer & project studio</h1>
+        </div>
+        <span className="version">
+          Document v{document.documentVersion}
+          <span>All changes stay on this device</span>
+        </span>
+      </div>
+      <div className="workspace">
+        <aside className="sidebar">
+          <div className="section-heading">
+            <h2>Entities</h2>
+            <span>
+              {document.model.entities.length.toString().padStart(2, "0")}
+            </span>
+          </div>
+          <nav aria-label="Entities">
+            {document.model.entities.map((item, index) => (
+              <button
+                key={item.id}
+                aria-pressed={selected === item.id}
+                className={`entity-nav ${selected === item.id ? "selected" : ""}`}
+                onClick={() => setSelected(item.id)}
+              >
+                <span className="entity-icon">{index + 1}</span>
+                <span>
+                  {item.name}
+                  <small>{item.fields.length} fields</small>
+                </span>
+                <span>↗</span>
+              </button>
+            ))}
+          </nav>
+          <button
+            className="add-entity"
+            onClick={() => {
+              const id = makeId("entity");
+              if (
+                dispatch({
+                  type: "addEntity",
+                  entity: {
+                    id,
+                    name: `Entity ${document.model.entities.length + 1}`,
+                    fields: [],
+                  },
+                  position: {
+                    x: 64 + (document.model.entities.length % 3) * 300,
+                    y:
+                      80 + Math.floor(document.model.entities.length / 3) * 240,
+                  },
+                })
+              )
+                setSelected(id);
+            }}
+          >
+            ＋ Add entity
+          </button>
+          <div className="sidebar-note">
+            <span>01 / MODEL</span>
+            <p>Make the structure visible.</p>
+            <small>
+              Select an entity to edit its fields. Try your model with
+              real-shaped, fictional data below.
+            </small>
+          </div>
+          <div className="legend">
+            <span>
+              <i className="dot" /> Entity
+            </span>
+            <span>1 ── N &nbsp; One-to-many</span>
+            <span>
+              <b>*</b> Required field
+            </span>
+          </div>
+        </aside>
+        <main>
+          <section className="canvas-section" aria-label="Model canvas">
+            <div className="canvas-toolbar">
+              <div>
+                <h2>Model canvas</h2>
+                <span>
+                  {document.model.entities.length} entities ·{" "}
+                  {document.model.relations.length} relations
+                </span>
+              </div>
+              <span className="hint">
+                Drag headers to arrange · Arrow keys to move
+              </span>
+            </div>
+            <Canvas
+              document={document}
+              selected={selected}
+              onSelect={setSelected}
+              dispatch={dispatch}
+            />
+          </section>
+          <section className="sandbox">
+            <div className="sandbox-header">
+              <div role="tablist" aria-label="Workspace tools">
+                <button
+                  role="tab"
+                  aria-selected={tab === "samples"}
+                  onClick={() => setTab("samples")}
+                >
+                  Sample playground
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={tab === "commands"}
+                  onClick={() => setTab("commands")}
+                >
+                  Command API
+                </button>
+              </div>
+              <span
+                className={diagnostics.length ? "issue-badge" : "valid-badge"}
+              >
+                {diagnostics.length
+                  ? `${diagnostics.length} validation issues`
+                  : "✓ All samples valid"}
+              </span>
+            </div>
+            {tab === "samples" ? (
+              <div className="sample-grid">
+                <div>
+                  {entity ? (
+                    <SampleEditor
+                      key={`${entity.id}-${revision}`}
+                      entity={entity}
+                      document={document}
+                      dispatch={dispatch}
+                    />
+                  ) : (
+                    <p>Select or add an entity to create a sample.</p>
+                  )}
+                </div>
+                <div className="validation">
+                  <div className="section-heading">
+                    <h3>Validation</h3>
+                    <span>LIVE</span>
+                  </div>
+                  <p className="muted">
+                    Required values, primitive types, and source records.
+                  </p>
+                  {diagnostics.length === 0 ? (
+                    <div className="all-valid">
+                      <span>✓</span>
+                      <strong>Your samples fit the model.</strong>
+                      <p>Change a field or value to explore the constraints.</p>
+                    </div>
+                  ) : (
+                    <ul className="diagnostics">
+                      {diagnostics.map((d) => (
+                        <li key={`${d.recordId}-${d.fieldId}-${d.code}`}>
+                          <button onClick={() => setSelected(d.entityId)}>
+                            <span className="diagnostic-code">{d.code}</span>
+                            <code>{d.recordId}</code>
+                            <p>{d.message}</p>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="command-panel">
+                <div>
+                  <h3>A shared, explicit operation boundary</h3>
+                  <p>
+                    Paste a single JSON command. It uses exactly the same
+                    validation and state transition as the UI.
+                  </p>
+                  <p className="muted">
+                    Developer demo only. No AI, LLM, or MCP connection is
+                    running.
+                  </p>
+                </div>
+                <div>
+                  <label htmlFor="command-json">Command JSON</label>
+                  <textarea
+                    id="command-json"
+                    value={commandJson}
+                    onChange={(e) => setCommandJson(e.target.value)}
+                    spellCheck={false}
+                    rows={10}
+                  />
+                  <button className="primary" onClick={applyJson}>
+                    Apply command
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+        </main>
+        <aside className="inspector">
+          <div className="section-heading">
+            <h2>Inspector</h2>
+            <span>PROPERTIES</span>
+          </div>
+          {entity ? (
+            <Inspector
+              key={`${entity.id}-${revision}`}
+              entity={entity}
+              document={document}
+              dispatch={dispatch}
+            />
+          ) : (
+            <p>Select an entity on the canvas.</p>
+          )}
+        </aside>
+      </div>
+      <footer role="status">
+        <span className="status-dot" />
+        {message}
+        <span className="footer-note">No account. No API key. No cloud.</span>
+      </footer>
+    </>
+  );
+}
+
+createRoot(window.document.getElementById("root")!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);

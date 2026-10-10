@@ -849,3 +849,18 @@ footer {
     font-size: 9px;
   }
 }
+
+.shared-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 24px;
+  background: #e2f2eb;
+  border-bottom: 1px solid #b5d5c8;
+  font-size: 13px;
+}
+.shared-banner [role="alert"] {
+  width: 100%;
+  color: #873e21;
+}

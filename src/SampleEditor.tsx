@@ -25,10 +25,10 @@ export function SampleEditor({
           <h3>{entity.name} samples</h3>
         </div>
         <button
-          onClick={() => {
+          onClick={async () => {
             const id = makeId("record");
             if (
-              dispatch({
+              await dispatch({
                 type: "setSample",
                 sample: { id, entityId: entity.id, values: {} },
               })
@@ -108,7 +108,10 @@ function RecordForm({
                   ? value === "true"
                   : value;
         }
-        dispatch({ type: "setSample", sample: { ...record, values } });
+        dispatch(
+          { type: "setSample", sample: { ...record, values } },
+          event.currentTarget,
+        );
       }}
     >
       {entity.fields.map((field) => {

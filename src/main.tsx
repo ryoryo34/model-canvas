@@ -14,6 +14,11 @@ import { makeId } from "./ui.ts";
 import type { Dispatch } from "./ui.ts";
 import { loadLocal, saveLocal } from "./storage.ts";
 import "./style.css";
+import { createDemo } from "./fixture.ts";
+import { useSharedDocument } from "./shared.ts";
+
+const sharedMode =
+  new URLSearchParams(window.location.search).get("shared") === "1";
 
 const example = JSON.stringify(
   {
@@ -30,6 +35,11 @@ const example = JSON.stringify(
   2,
 );
 function boot() {
+  if (sharedMode)
+    return {
+      document: createDemo(),
+      message: "Connecting to shared document…",
+    };
   try {
     return loadLocal(window.localStorage);
   } catch {
@@ -62,7 +72,17 @@ function App() {
     setDocument(next);
     setDirty(true);
   };
-  const dispatch: Dispatch = (command) => {
+  const shared = useSharedDocument(
+    sharedMode,
+    (next, reset) => {
+      current.current = next;
+      setDocument(next);
+      if (reset) setRevision((r) => r + 1);
+    },
+    setMessage,
+  );
+  const dispatch: Dispatch = async (command, draftScope) => {
+    if (sharedMode) return shared.apply(command, draftScope);
     const result = applyCommand(current.current, command);
     if (!result.ok) {
       setMessage(`Command rejected: ${result.error}`);
@@ -72,8 +92,12 @@ function App() {
     setMessage(`Applied ${command.type}.`);
     return true;
   };
-  const applyJson = () => {
+  const applyJson = async () => {
     try {
+      if (sharedMode) {
+        await shared.apply(JSON.parse(commandJson), "command");
+        return;
+      }
       const result = applyCommand(current.current, JSON.parse(commandJson));
       if (!result.ok) {
         setMessage(`Command rejected: ${result.error}`);
@@ -145,13 +169,16 @@ function App() {
         </div>
         <div className="header-actions">
           <span className="local-badge">
-            <i /> Local demo
+            <i /> {sharedMode ? "Shared mode · MCP + browser" : "Local demo"}
           </span>
-          <button onClick={() => fileInput.current?.click()}>
+          <button
+            disabled={sharedMode}
+            onClick={() => fileInput.current?.click()}
+          >
             Import JSON
           </button>
           <button onClick={download}>Export JSON</button>
-          <button className="primary" onClick={save}>
+          <button disabled={sharedMode} className="primary" onClick={save}>
             Save locally{dirty ? " •" : ""}
           </button>
         </div>
@@ -167,6 +194,27 @@ function App() {
           }}
         />
       </header>
+      {sharedMode && (
+        <section className="shared-banner" aria-label="Shared connection">
+          <strong role="status">{shared.status}</strong>
+          <span>
+            Applied edits save to the server file. Drafts pause incoming
+            changes.
+          </span>
+          <button
+            disabled={shared.pending}
+            onClick={() => void shared.reload()}
+          >
+            Reload shared document (discard drafts)
+          </button>
+          {shared.reloadNeeded && (
+            <span role="alert">
+              Reload required before more edits. Copy unsent form text first;
+              Export JSON preserves the displayed model.
+            </span>
+          )}
+        </section>
+      )}
       <div className="workspace-bar">
         <div>
           <span className="eyebrow">WORKSPACE / FICTIONAL EXAMPLE</span>
@@ -177,7 +225,37 @@ function App() {
           <span>All changes stay on this device</span>
         </span>
       </div>
-      <div className="workspace">
+      <div
+        className="workspace"
+        inert={sharedMode && (!shared.ready || shared.pending)}
+        onChangeCapture={(event) => {
+          const target = event.target as HTMLElement;
+          shared.markDraft(
+            target.id === "command-json" ? "command" : target.closest("form"),
+          );
+        }}
+        onPointerDownCapture={(event) => {
+          if (event.button === 0)
+            shared.markDraft(
+              (event.target as HTMLElement).closest(".node-header"),
+            );
+        }}
+        onPointerUpCapture={(event) =>
+          shared.clearDraft(
+            (event.target as HTMLElement).closest(".node-header"),
+          )
+        }
+        onPointerCancelCapture={(event) =>
+          shared.clearDraft(
+            (event.target as HTMLElement).closest(".node-header"),
+          )
+        }
+        onLostPointerCapture={(event) =>
+          shared.clearDraft(
+            (event.target as HTMLElement).closest(".node-header"),
+          )
+        }
+      >
         <aside className="sidebar">
           <div className="section-heading">
             <h2>Entities</h2>
@@ -204,10 +282,10 @@ function App() {
           </nav>
           <button
             className="add-entity"
-            onClick={() => {
+            onClick={async () => {
               const id = makeId("entity");
               if (
-                dispatch({
+                await dispatch({
                   type: "addEntity",
                   entity: {
                     id,
@@ -343,8 +421,9 @@ function App() {
                     validation and state transition as the UI.
                   </p>
                   <p className="muted">
-                    Developer demo only. No AI, LLM, or MCP connection is
-                    running.
+                    {sharedMode
+                      ? "Commands save through the shared server. MCP clients use the same DocumentStore. No LLM chat is running."
+                      : "Developer demo only. No AI, LLM, or MCP connection is running."}
                   </p>
                 </div>
                 <div>

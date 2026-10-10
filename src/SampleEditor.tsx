@@ -25,10 +25,10 @@ export function SampleEditor({
           <h3>{entity.name} samples</h3>
         </div>
         <button
-          onClick={() => {
+          onClick={async () => {
             const id = makeId("record");
             if (
-              dispatch({
+              await dispatch({
                 type: "setSample",
                 sample: { id, entityId: entity.id, values: {} },
               })

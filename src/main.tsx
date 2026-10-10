@@ -81,8 +81,8 @@ function App() {
     },
     setMessage,
   );
-  const dispatch: Dispatch = async (command) => {
-    if (sharedMode) return shared.apply(command);
+  const dispatch: Dispatch = async (command, draftScope) => {
+    if (sharedMode) return shared.apply(command, draftScope);
     const result = applyCommand(current.current, command);
     if (!result.ok) {
       setMessage(`Command rejected: ${result.error}`);
@@ -95,7 +95,7 @@ function App() {
   const applyJson = async () => {
     try {
       if (sharedMode) {
-        await shared.apply(JSON.parse(commandJson));
+        await shared.apply(JSON.parse(commandJson), "command");
         return;
       }
       const result = applyCommand(current.current, JSON.parse(commandJson));
@@ -228,11 +228,33 @@ function App() {
       <div
         className="workspace"
         inert={sharedMode && (!shared.ready || shared.pending)}
-        onChangeCapture={shared.markDraft}
-        onPointerDownCapture={(event) => {
-          if ((event.target as HTMLElement).closest(".node-header"))
-            shared.markDraft();
+        onChangeCapture={(event) => {
+          const target = event.target as HTMLElement;
+          shared.markDraft(
+            target.id === "command-json" ? "command" : target.closest("form"),
+          );
         }}
+        onPointerDownCapture={(event) => {
+          if (event.button === 0)
+            shared.markDraft(
+              (event.target as HTMLElement).closest(".node-header"),
+            );
+        }}
+        onPointerUpCapture={(event) =>
+          shared.clearDraft(
+            (event.target as HTMLElement).closest(".node-header"),
+          )
+        }
+        onPointerCancelCapture={(event) =>
+          shared.clearDraft(
+            (event.target as HTMLElement).closest(".node-header"),
+          )
+        }
+        onLostPointerCapture={(event) =>
+          shared.clearDraft(
+            (event.target as HTMLElement).closest(".node-header"),
+          )
+        }
       >
         <aside className="sidebar">
           <div className="section-heading">

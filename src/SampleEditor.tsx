@@ -108,7 +108,10 @@ function RecordForm({
                   ? value === "true"
                   : value;
         }
-        dispatch({ type: "setSample", sample: { ...record, values } });
+        dispatch(
+          { type: "setSample", sample: { ...record, values } },
+          event.currentTarget,
+        );
       }}
     >
       {entity.fields.map((field) => {

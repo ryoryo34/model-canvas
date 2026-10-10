@@ -33,11 +33,14 @@ export function Inspector({
           onSubmit={(event) => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
-            dispatch({
-              type: "updateEntity",
-              entityId: entity.id,
-              name: String(data.get("name")),
-            });
+            dispatch(
+              {
+                type: "updateEntity",
+                entityId: entity.id,
+                name: String(data.get("name")),
+              },
+              event.currentTarget,
+            );
           }}
         >
           <label>
@@ -128,15 +131,18 @@ export function Inspector({
           onSubmit={(event) => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
-            dispatch({
-              type: "addRelation",
-              relation: {
-                id: makeId("relation"),
-                sourceEntityId: sourceId,
-                targetEntityId: entity.id,
-                targetFieldId: String(data.get("targetField")),
+            dispatch(
+              {
+                type: "addRelation",
+                relation: {
+                  id: makeId("relation"),
+                  sourceEntityId: sourceId,
+                  targetEntityId: entity.id,
+                  targetFieldId: String(data.get("targetField")),
+                },
               },
-            });
+              event.currentTarget,
+            );
           }}
         >
           <label>
@@ -194,16 +200,19 @@ function FieldEditor({
       onSubmit={(event) => {
         event.preventDefault();
         const data = new FormData(event.currentTarget);
-        dispatch({
-          type: "updateField",
-          entityId,
-          fieldId: field.id,
-          patch: {
-            name: String(data.get("name")),
-            type: data.get("type") as FieldType,
-            required: data.get("required") === "on",
+        dispatch(
+          {
+            type: "updateField",
+            entityId,
+            fieldId: field.id,
+            patch: {
+              name: String(data.get("name")),
+              type: data.get("type") as FieldType,
+              required: data.get("required") === "on",
+            },
           },
-        });
+          event.currentTarget,
+        );
       }}
     >
       <label>

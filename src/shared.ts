@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ModelDocument } from "./model.ts";
+import type { DraftScope } from "./ui.ts";
 import type { Snapshot, StoreResult } from "../server/store.ts";
 
 /** Poll only while safe; conflict/reconnect requires an explicit discard-and-reload. */
@@ -12,11 +13,20 @@ export function useSharedDocument(
   callbacks.current = { receive, message };
   const state = useRef({
     revision: -1,
-    drafts: false,
+    drafts: new Map<DraftScope, number>(),
     blocked: false,
     pending: false,
     generation: 0,
   });
+  const hasDrafts = () => {
+    // Forms unmount when users navigate away. The command text lives in App
+    // across tab switches, so its scope remains until saved or explicitly reset.
+    for (const scope of state.current.drafts.keys()) {
+      if (typeof scope !== "string" && !scope.isConnected)
+        state.current.drafts.delete(scope);
+    }
+    return state.current.drafts.size > 0;
+  };
   const [status, setStatus] = useState("Connecting");
   const [pending, setPending] = useState(false);
   const [ready, setReady] = useState(false);
@@ -59,7 +69,7 @@ export function useSharedDocument(
           )
             return;
           if (snapshot.revision !== state.current.revision) {
-            if (state.current.drafts)
+            if (hasDrafts())
               block(
                 "Remote changes available. Drafts preserved; reload required.",
               );
@@ -85,7 +95,7 @@ export function useSharedDocument(
   useEffect(() => {
     if (!enabled) return;
     const warn = (event: BeforeUnloadEvent) => {
-      if (state.current.drafts || state.current.pending) {
+      if (hasDrafts() || state.current.pending) {
         event.preventDefault();
         event.returnValue = "";
       }
@@ -93,7 +103,14 @@ export function useSharedDocument(
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [enabled]);
-  const apply = async (command: unknown): Promise<boolean> => {
+  const apply = async (
+    command: unknown,
+    draftScope?: DraftScope,
+  ): Promise<boolean> => {
+    const submittedVersion =
+      draftScope === undefined
+        ? undefined
+        : state.current.drafts.get(draftScope);
     if (!ready || state.current.pending || state.current.blocked) {
       callbacks.current.message(
         "Shared edit not sent. Wait for the current save, or reload the shared document.",
@@ -124,7 +141,13 @@ export function useSharedDocument(
       }
       accept(result, false);
       callbacks.current.message(`Saved shared revision ${result.revision}.`);
-      // Conservatively retain the draft guard: other forms may still have unsent edits.
+      // Acknowledging one form must not clear another form (or edits made
+      // after this submission). Failures and unknown outcomes clear nothing.
+      if (
+        draftScope !== undefined &&
+        state.current.drafts.get(draftScope) === submittedVersion
+      )
+        state.current.drafts.delete(draftScope);
       return true;
     } catch {
       block(
@@ -146,7 +169,7 @@ export function useSharedDocument(
     setPending(true);
     try {
       const snapshot = await get();
-      state.current.drafts = false;
+      state.current.drafts.clear();
       state.current.blocked = false;
       setReloadNeeded(false);
       accept(snapshot, true);
@@ -169,8 +192,15 @@ export function useSharedDocument(
     reloadNeeded,
     apply,
     reload,
-    markDraft: () => {
-      if (enabled) state.current.drafts = true;
+    markDraft: (scope: DraftScope | null) => {
+      if (enabled && scope !== null)
+        state.current.drafts.set(
+          scope,
+          (state.current.drafts.get(scope) ?? 0) + 1,
+        );
+    },
+    clearDraft: (scope: DraftScope | null) => {
+      if (scope !== null) state.current.drafts.delete(scope);
     },
   };
 }

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   applyCommand,
@@ -9,6 +9,7 @@ import {
 import type { ModelDocument } from "./model.ts";
 import { Canvas } from "./Canvas.tsx";
 import { Inspector } from "./Inspector.tsx";
+import { hasPractice, PracticeSteps } from "./ExperienceGuide.tsx";
 import { SampleEditor } from "./SampleEditor.tsx";
 import { makeId } from "./ui.ts";
 import type { Dispatch } from "./ui.ts";
@@ -62,6 +63,45 @@ function App() {
   const [message, setMessage] = useState(initial.message);
   const [commandJson, setCommandJson] = useState(example);
   const [tab, setTab] = useState<"samples" | "commands">("samples");
+  const [guide, setGuide] = useState<"overview" | "practice" | "closed">(
+    "overview",
+  );
+  const [recordIds, setRecordIds] = useState<Record<string, string>>({});
+  const [destination, setDestination] = useState<{
+    recordId: string;
+    fieldId: string;
+  }>();
+  const [sampleApplied, setSampleApplied] = useState(0);
+  useEffect(() => {
+    if (!sampleApplied) return;
+    const result = window.document.getElementById("practice-result");
+    result?.focus({ preventScroll: true });
+    result?.scrollIntoView({ block: "center" });
+  }, [sampleApplied]);
+  const overview = useRef<HTMLElement>(null);
+  const reopenGuide = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (guide === "closed") reopenGuide.current?.focus({ preventScroll: true });
+  }, [guide]);
+  const showSample = (entityId: string, recordId: string, fieldId: string) => {
+    setSelected(entityId);
+    setRecordIds((ids) => ({ ...ids, [entityId]: recordId }));
+    setTab("samples");
+    setDestination({ recordId, fieldId });
+  };
+  useEffect(() => {
+    if (!destination) return;
+    const input = window.document.getElementById(
+      `sample:${destination.recordId}:${destination.fieldId}`,
+    );
+    input?.focus({ preventScroll: true });
+    input?.scrollIntoView({ block: "center" });
+  }, [destination]);
+  const backToOverview = () => {
+    setGuide("overview");
+    overview.current?.scrollIntoView({ block: "start" });
+    overview.current?.focus({ preventScroll: true });
+  };
   const [dirty, setDirty] = useState(false);
   const [revision, setRevision] = useState(0);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -82,7 +122,19 @@ function App() {
     setMessage,
   );
   const dispatch: Dispatch = async (command, draftScope) => {
-    if (sharedMode) return shared.apply(command, draftScope);
+    const announcePractice = () => {
+      if (
+        guide === "practice" &&
+        command.type === "setSample" &&
+        command.sample.id === "project_draft"
+      )
+        setSampleApplied((count) => count + 1);
+    };
+    if (sharedMode) {
+      const applied = await shared.apply(command, draftScope);
+      if (applied) announcePractice();
+      return applied;
+    }
     const result = applyCommand(current.current, command);
     if (!result.ok) {
       setMessage(`Command rejected: ${result.error}`);
@@ -90,6 +142,7 @@ function App() {
     }
     replace(result.document);
     setMessage(`Applied ${command.type}.`);
+    announcePractice();
     return true;
   };
   const applyJson = async () => {
@@ -323,6 +376,57 @@ function App() {
           </div>
         </aside>
         <main>
+          <section
+            className="experience-guide"
+            aria-label="Quick guide"
+            ref={overview}
+            tabIndex={-1}
+          >
+            {guide === "closed" ? (
+              <button ref={reopenGuide} onClick={() => setGuide("overview")}>
+                Show quick guide
+              </button>
+            ) : (
+              <>
+                <div className="section-heading">
+                  <span className="eyebrow">01 / SEE YOUR MODEL AT WORK</span>
+                  <button
+                    aria-label="Close guide"
+                    onClick={() => setGuide("closed")}
+                  >
+                    Close
+                  </button>
+                </div>
+                <h2>Test your model with sample data.</h2>
+                <p>
+                  {hasPractice(document)
+                    ? "The fictional example starts with 3 deliberate errors. Fix a record to see required fields, types, and customer references work together."
+                    : "Select an entity, try sample values, and apply them to check your model. Choose any diagnostic to jump to its record and field."}
+                </p>
+                <div className="guide-actions">
+                  {hasPractice(document) && (
+                    <button
+                      className="primary"
+                      onClick={() => {
+                        setGuide("practice");
+                        showSample("project", "project_draft", "project_title");
+                      }}
+                    >
+                      {guide === "practice"
+                        ? "Return to practice record"
+                        : "Try the example"}{" "}
+                      →
+                    </button>
+                  )}
+                  <span>Explore → Fix & validate → Save / export</span>
+                </div>
+                <small>
+                  Navigation keeps unapplied inputs. Only Apply changes the
+                  sample.
+                </small>
+              </>
+            )}
+          </section>
           <section className="canvas-section" aria-label="Model canvas">
             <div className="canvas-toolbar">
               <div>
@@ -369,17 +473,49 @@ function App() {
                   : "✓ All samples valid"}
               </span>
             </div>
-            {tab === "samples" ? (
+            <div hidden={tab !== "samples"}>
               <div className="sample-grid">
                 <div>
-                  {entity ? (
-                    <SampleEditor
-                      key={`${entity.id}-${revision}`}
-                      entity={entity}
-                      document={document}
-                      dispatch={dispatch}
-                    />
-                  ) : (
+                  {document.model.entities.map((item) => (
+                    <div
+                      key={`${item.id}-${revision}`}
+                      hidden={selected !== item.id}
+                    >
+                      <SampleEditor
+                        entity={item}
+                        document={document}
+                        dispatch={dispatch}
+                        diagnostics={diagnostics}
+                        recordId={recordIds[item.id]}
+                        onRecordChange={(id) =>
+                          setRecordIds((ids) => ({ ...ids, [item.id]: id }))
+                        }
+                        practice={
+                          item.id === "project" &&
+                          guide === "practice" &&
+                          hasPractice(document) ? (
+                            <PracticeSteps
+                              document={document}
+                              diagnostics={diagnostics}
+                              sharedMode={sharedMode}
+                              save={save}
+                              download={download}
+                              back={backToOverview}
+                              close={() => {
+                                setGuide("closed");
+                                showSample(
+                                  "project",
+                                  "project_draft",
+                                  "project_title",
+                                );
+                              }}
+                            />
+                          ) : undefined
+                        }
+                      />
+                    </div>
+                  ))}
+                  {!entity && (
                     <p>Select or add an entity to create a sample.</p>
                   )}
                 </div>
@@ -401,7 +537,11 @@ function App() {
                     <ul className="diagnostics">
                       {diagnostics.map((d) => (
                         <li key={`${d.recordId}-${d.fieldId}-${d.code}`}>
-                          <button onClick={() => setSelected(d.entityId)}>
+                          <button
+                            onClick={() =>
+                              showSample(d.entityId, d.recordId, d.fieldId)
+                            }
+                          >
                             <span className="diagnostic-code">{d.code}</span>
                             <code>{d.recordId}</code>
                             <p>{d.message}</p>
@@ -412,7 +552,8 @@ function App() {
                   )}
                 </div>
               </div>
-            ) : (
+            </div>
+            <div hidden={tab !== "commands"}>
               <div className="command-panel">
                 <div>
                   <h3>A shared, explicit operation boundary</h3>
@@ -440,7 +581,7 @@ function App() {
                   </button>
                 </div>
               </div>
-            )}
+            </div>
           </section>
         </main>
         <aside className="inspector">
@@ -448,16 +589,16 @@ function App() {
             <h2>Inspector</h2>
             <span>PROPERTIES</span>
           </div>
-          {entity ? (
-            <Inspector
-              key={`${entity.id}-${revision}`}
-              entity={entity}
-              document={document}
-              dispatch={dispatch}
-            />
-          ) : (
-            <p>Select an entity on the canvas.</p>
-          )}
+          {document.model.entities.map((item) => (
+            <div key={`${item.id}-${revision}`} hidden={selected !== item.id}>
+              <Inspector
+                entity={item}
+                document={document}
+                dispatch={dispatch}
+              />
+            </div>
+          ))}
+          {!entity && <p>Select an entity on the canvas.</p>}
         </aside>
       </div>
       <footer role="status">

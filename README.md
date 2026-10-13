@@ -15,8 +15,8 @@ Use **Node.js 22.18 or later** and npm. No API keys or account are needed. The d
 ```sh
 git clone https://github.com/ryoryo34/model-canvas.git
 cd model-canvas
-# Until the shared-mode PR is merged:
-git switch issue-3-mcp-collaboration
+# Until the experience PR is merged:
+git switch issue-5-experience-polish
 npm ci
 npm run dev
 ```
@@ -112,6 +112,12 @@ Requests/stdio buffers are limited to 1 MiB, batches to 100 commands, and persis
 ## Try the fictional example
 
 These steps describe the default browser-only mode (`npm run dev`).
+
+**Start with the on-screen quick guide:** choose **Try the example** to open `project_draft` and focus Title. Enter `Community demo`, `4200`, and `customer_lumen`, then **Apply sample**. The three intentional errors become zero, and the guide shows which applied values now pass, with **Save this model locally** and **Download model JSON**. The guide does not fill, reset, or save data for you. In shared mode it uses the current server document; acknowledged edits already save there. If the example is absent, the guide describes the general workflow instead.
+
+Choose a validation diagnostic to open its entity and record and focus the affected field. Unapplied sample, inspector, and command inputs survive entity, record, and tool-tab navigation, including closing or reopening the guide. In shared mode these hidden drafts still pause incoming changes; return and apply them or explicitly reload to discard. Saving/exporting includes applied document data only. Browser refresh, import, JSON commands that rebuild editors, or changes to a record/field schema may still reset affected inputs: this is not a persistent draft history.
+
+**Fit all** initially shows both cards and their relation; **100%** restores full-size editing with internal scrolling. View changes never write model positions. Drag distances account for the displayed scale, while arrow keys always move 16 model pixels. Narrow desktop layouts put the inspector below the playground. See the [two-minute walkthrough and screenshots](docs/EXPERIENCE.md) and [verification](docs/VERIFICATION-EXPERIENCE.md).
 
 1. Start with **Customer** and **Project**. Select an entity on the left or canvas. Rename it, add fields, and change field names, types (`string`, `number`, `boolean`) or `required` in the inspector. Submit each edit with its button.
 2. Drag a card header to move it. A focused header also supports arrow keys (16 pixels per press). The canvas scrolls for larger layouts.

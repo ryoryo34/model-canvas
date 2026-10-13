@@ -62,7 +62,9 @@ test("entity and field edits synchronize canvas, inspector and generated form", 
   await page
     .getByRole("button", { name: "＋ Add entity", exact: true })
     .click();
-  await page.getByLabel("Entity name", { exact: true }).fill("Milestone");
+  await page
+    .getByRole("textbox", { name: "Entity name", exact: true })
+    .fill("Milestone");
   await page.getByRole("button", { name: "Rename entity" }).click();
   await page.getByRole("button", { name: "＋ Add field", exact: true }).click();
   const editor = page.getByRole("form", { name: "Edit Field 1" });
@@ -116,18 +118,21 @@ test("disconnect and reconnect update diagram and reference validation", async (
   await expect(page.getByText("2 validation issues")).toBeVisible();
   await expect(page.getByText(/References Customer:/)).toHaveCount(0);
   await page
-    .getByLabel("Reference field (many)")
+    .getByRole("combobox", { name: "Reference field (many)", exact: true })
     .selectOption("project_customer");
   await page.getByRole("button", { name: "Connect relation" }).click();
   await expect(page.getByTestId("relation-edge")).toHaveCount(1);
   await expect(page.getByText("3 validation issues")).toBeVisible();
-  await expect(page.getByText(/References Customer:/)).toBeVisible();
+  await expect(
+    page.getByText(/References Customer:/).filter({ visible: true }),
+  ).toBeVisible();
 });
 test("drag and keyboard movement survive export/import; all rejected imports keep current edits", async ({
   page,
 }) => {
   await page.goto("/");
   await fixSample(page);
+  await page.getByRole("button", { name: "100%", exact: true }).click();
   const header = page.getByRole("button", { name: "Move Customer" });
   await header.scrollIntoViewIfNeeded();
   const box = (await header.boundingBox())!;
@@ -175,7 +180,9 @@ test("browser UI and JSON API share exact state transitions and reject invalid c
     entityId: "customer",
     name: "Client",
   };
-  await page.getByLabel("Entity name", { exact: true }).fill("Client");
+  await page
+    .getByRole("textbox", { name: "Entity name", exact: true })
+    .fill("Client");
   await page.getByRole("button", { name: "Rename entity" }).click();
   const ui = await exportFrom(page);
   const expected = applyCommand(createDemo(), command);
@@ -186,9 +193,9 @@ test("browser UI and JSON API share exact state transitions and reject invalid c
   await page.getByRole("button", { name: "Apply command" }).click();
   expect(await exportFrom(page)).toEqual(ui);
   await expect(page.getByRole("button", { name: "Move Client" })).toBeVisible();
-  await expect(page.getByLabel("Entity name", { exact: true })).toHaveValue(
-    "Client",
-  );
+  await expect(
+    page.getByRole("textbox", { name: "Entity name", exact: true }),
+  ).toHaveValue("Client");
   for (const bad of [
     "{",
     JSON.stringify({ type: "updateEntity", entityId: "missing", name: "Gone" }),

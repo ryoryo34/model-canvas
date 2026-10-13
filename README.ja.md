@@ -15,8 +15,8 @@ AIと人が一緒に、モデル・関係・制約をサンプルデータで試
 ```sh
 git clone https://github.com/ryoryo34/model-canvas.git
 cd model-canvas
-# 共有モードのPRがマージされるまでは:
-git switch issue-3-mcp-collaboration
+# 体験改善のPRがマージされるまでは:
+git switch issue-5-experience-polish
 npm ci
 npm run dev
 ```
@@ -112,6 +112,12 @@ request・stdioバッファは1 MiB、batchは100 command、保存ドキュメ�
 ## 架空サンプルを試す
 
 以下は標準のブラウザ単独モード（`npm run dev`）の手順です。
+
+**画面のクイックガイドから開始:** **Try the example**で`project_draft`を開き、Titleへfocusします。`Community demo`、`4200`、`customer_lumen`を入力して**Apply sample**を押すと、意図的な3件のエラーが0件になります。ガイドで検証を通った適用値を確認し、**Save this model locally**または**Download model JSON**へ進めます。ガイドは値の入力・初期化・保存を代行しません。共有モードでは現在のサーバードキュメントを使い、適用成功した編集は既に保存済みです。サンプルがないモデルでは一般的な操作案内を表示します。
+
+診断を選ぶと、対象Entity・レコードを開いて該当Fieldへfocusします。未適用のサンプル・インスペクター・command入力は、Entity・レコード・ツールタブの移動、ガイドの開閉でも保持します。共有モードでは非表示のdraftも受信更新を止めるため、戻って適用するか、明示的に再読込して破棄してください。保存・exportの対象は適用済みドキュメントのみです。ブラウザ再読込・import・エディターを再構築するJSON command・レコードやField定義の変更では、該当入力がリセットされることがあります。draftの永続的な履歴機能ではありません。
+
+初期の**Fit all**では2カードと関係線を全体表示します。**100%**で通常サイズと内部スクロールに戻せます。表示切替はモデルの保存位置を変更しません。ドラッグは表示倍率を考慮し、矢印キーは常にモデル座標で16px移動します。狭いデスクトップではインスペクターをplaygroundの下に配置します。[2分の体験手順と画像](docs/EXPERIENCE.md)、[検証記録](docs/VERIFICATION-EXPERIENCE.md)を参照してください。
 
 1. **Customer**と**Project**から始まります。左側またはキャンバスでEntityを選択し、インスペクターで名称変更、Field追加、Field名・型（`string`・`number`・`boolean`）・`required`を変更します。各編集はボタンで適用します。
 2. カードのヘッダーをドラッグして移動します。ヘッダーにフォーカスして矢印キーでも移動できます（1回16px）。大きな配置ではキャンバスをスクロールできます。

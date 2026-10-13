@@ -38,7 +38,7 @@ test("real stdio SDK edits reach the browser; UI edits reach MCP, conflicts and 
       .getByRole("button", { name: /Milestone/ })
       .click();
     await page
-      .getByLabel("Entity name", { exact: true })
+      .getByRole("textbox", { name: "Entity name", exact: true })
       .fill("Release milestone");
     await page.getByRole("button", { name: "Rename entity" }).click();
     await expect(connection).toContainText("Connected · revision 2");
@@ -49,7 +49,9 @@ test("real stdio SDK edits reach the browser; UI edits reach MCP, conflicts and 
     ).toBe("Release milestone");
     expect(JSON.parse(readFileSync(path, "utf8")).revision).toBe(2);
 
-    await page.getByLabel("Entity name", { exact: true }).fill("Unsent draft");
+    await page
+      .getByRole("textbox", { name: "Entity name", exact: true })
+      .fill("Unsent draft");
     expect(
       (
         await session.apply(2, [
@@ -64,9 +66,9 @@ test("real stdio SDK edits reach the browser; UI edits reach MCP, conflicts and 
     // Submit before or after polling discovers the remote revision: neither path may overwrite it.
     await page.getByRole("button", { name: "Rename entity" }).click();
     await expect(connection).toContainText("reload required");
-    await expect(page.getByLabel("Entity name", { exact: true })).toHaveValue(
-      "Unsent draft",
-    );
+    await expect(
+      page.getByRole("textbox", { name: "Entity name", exact: true }),
+    ).toHaveValue("Unsent draft");
     expect(
       (await session.read()).document.model.entities.find(
         (e) => e.id === "milestone",
@@ -75,17 +77,19 @@ test("real stdio SDK edits reach the browser; UI edits reach MCP, conflicts and 
     await page
       .getByRole("button", { name: "Reload shared document (discard drafts)" })
       .click();
-    await expect(page.getByLabel("Entity name", { exact: true })).toHaveValue(
-      "Remote winner",
-    );
+    await expect(
+      page.getByRole("textbox", { name: "Entity name", exact: true }),
+    ).toHaveValue("Remote winner");
 
-    await page.getByLabel("Entity name", { exact: true }).fill("Offline draft");
+    await page
+      .getByRole("textbox", { name: "Entity name", exact: true })
+      .fill("Offline draft");
     const port = Number(new URL(session.origin).port);
     await session.close();
     await expect(connection).toContainText("Disconnected");
-    await expect(page.getByLabel("Entity name", { exact: true })).toHaveValue(
-      "Offline draft",
-    );
+    await expect(
+      page.getByRole("textbox", { name: "Entity name", exact: true }),
+    ).toHaveValue("Offline draft");
     session = await connectTestClient(path, port);
     const before = await session.read();
     expect(
@@ -100,9 +104,9 @@ test("real stdio SDK edits reach the browser; UI edits reach MCP, conflicts and 
       ).ok,
     ).toBe(true);
     await page.getByRole("button", { name: "Rename entity" }).click();
-    await expect(page.getByLabel("Entity name", { exact: true })).toHaveValue(
-      "Offline draft",
-    );
+    await expect(
+      page.getByRole("textbox", { name: "Entity name", exact: true }),
+    ).toHaveValue("Offline draft");
     expect((await session.read()).revision).toBe(4);
     await page.screenshot({
       path: "test-results/shared-draft-preserved.png",
@@ -112,9 +116,9 @@ test("real stdio SDK edits reach the browser; UI edits reach MCP, conflicts and 
       .getByRole("button", { name: "Reload shared document (discard drafts)" })
       .click();
     await expect(connection).toContainText("Connected · revision 4");
-    await expect(page.getByLabel("Entity name", { exact: true })).toHaveValue(
-      "After restart",
-    );
+    await expect(
+      page.getByRole("textbox", { name: "Entity name", exact: true }),
+    ).toHaveValue("After restart");
     await page.screenshot({
       path: "test-results/shared-roundtrip.png",
       fullPage: true,
@@ -140,13 +144,13 @@ test("lost write response preserves form text and requires reconciliation withou
       await route.abort("failed");
     });
     await page
-      .getByLabel("Entity name", { exact: true })
+      .getByRole("textbox", { name: "Entity name", exact: true })
       .fill("Committed but unacknowledged");
     await page.getByRole("button", { name: "Rename entity" }).click();
     await expect(connection).toContainText("Save outcome unknown");
-    await expect(page.getByLabel("Entity name", { exact: true })).toHaveValue(
-      "Committed but unacknowledged",
-    );
+    await expect(
+      page.getByRole("textbox", { name: "Entity name", exact: true }),
+    ).toHaveValue("Committed but unacknowledged");
     expect((await session.read()).revision).toBe(1);
     await page.getByRole("button", { name: "Rename entity" }).click();
     expect((await session.read()).revision).toBe(1);
@@ -169,7 +173,9 @@ test("successful form save resumes remote synchronization when no drafts remain"
     await page.goto(`${session.origin}/?shared=1`);
     const connection = page.getByRole("region", { name: "Shared connection" });
     await expect(connection).toContainText("Connected · revision 0");
-    await page.getByLabel("Entity name", { exact: true }).fill("Saved client");
+    await page
+      .getByRole("textbox", { name: "Entity name", exact: true })
+      .fill("Saved client");
     await page.getByRole("button", { name: "Rename entity" }).click();
     await expect(connection).toContainText("Connected · revision 1");
     expect(
@@ -205,7 +211,9 @@ test("saving one form preserves drafts in other forms when MCP changes arrive", 
     const sampleName = page.getByRole("textbox", { name: /^Name \*/ });
     await fieldName.fill("Unsent field label");
     await sampleName.fill("Unsent sample value");
-    await page.getByLabel("Entity name", { exact: true }).fill("Saved client");
+    await page
+      .getByRole("textbox", { name: "Entity name", exact: true })
+      .fill("Saved client");
     await page.getByRole("button", { name: "Rename entity" }).click();
     await expect(connection).toContainText("Connected · revision 1");
     await expect(fieldName).toHaveValue("Unsent field label");
@@ -263,15 +271,13 @@ test("sample, field, command and drag completion release only their own draft gu
     await syncNext();
 
     await page.getByRole("tab", { name: "Command API" }).click();
-    await page
-      .getByLabel("Command JSON")
-      .fill(
-        JSON.stringify({
-          type: "updateEntity",
-          entityId: "customer",
-          name: "Saved command",
-        }),
-      );
+    await page.getByLabel("Command JSON").fill(
+      JSON.stringify({
+        type: "updateEntity",
+        entityId: "customer",
+        name: "Saved command",
+      }),
+    );
     await page.getByRole("button", { name: "Apply command" }).click();
     await expect(connection).toContainText("Connected · revision 5");
     await syncNext();
@@ -290,6 +296,60 @@ test("sample, field, command and drag completion release only their own draft gu
     // Selecting a card without moving it creates no outstanding draft.
     await header.click();
     await syncNext();
+  } finally {
+    await session.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("guide navigation keeps hidden drafts protected from MCP updates and never writes", async ({
+  page,
+}) => {
+  const dir = mkdtempSync(join(tmpdir(), "model-canvas-guide-"));
+  const session = await connectTestClient(join(dir, "model.json"));
+  try {
+    await page.goto(`${session.origin}/?shared=1`);
+    const connection = page.getByRole("region", { name: "Shared connection" });
+    await expect(connection).toContainText("Connected · revision 0");
+    await page
+      .getByRole("textbox", { name: "Name * string", exact: true })
+      .fill("Hidden draft");
+    await page.getByRole("button", { name: "Try the example" }).click();
+    await expect(
+      page.getByRole("textbox", { name: "Title * string", exact: true }),
+    ).toBeFocused();
+    await page
+      .getByRole("textbox", { name: "Title * string", exact: true })
+      .fill("Shared practice");
+    await page
+      .getByRole("textbox", { name: "Budget number", exact: true })
+      .fill("4200");
+    await page
+      .getByRole("combobox", { name: "Customer ID * string", exact: true })
+      .fill("customer_lumen");
+    expect((await session.read()).revision).toBe(0);
+    await page
+      .getByRole("button", { name: "Apply sample", exact: true })
+      .click();
+    await expect(connection).toContainText("Connected · revision 1");
+    await expect(
+      page.getByRole("region", { name: "Practice steps" }),
+    ).toContainText("saved to the shared server");
+    await expect(
+      page.getByRole("button", { name: "Save this model locally" }),
+    ).toHaveCount(0);
+    await session.apply(1, [
+      { type: "updateEntity", entityId: "customer", name: "Remote customer" },
+    ]);
+    await expect(connection).toContainText("Drafts preserved; reload required");
+    await page
+      .getByRole("navigation", { name: "Entities" })
+      .getByRole("button", { name: /Customer/ })
+      .click();
+    await expect(
+      page.getByRole("textbox", { name: "Name * string", exact: true }),
+    ).toHaveValue("Hidden draft");
+    expect((await session.read()).revision).toBe(2);
   } finally {
     await session.close();
     rmSync(dir, { recursive: true, force: true });

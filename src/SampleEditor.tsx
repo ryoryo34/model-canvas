@@ -1,5 +1,11 @@
 import { useState } from "react";
-import type { Entity, ModelDocument, SampleRecord, Value } from "./model.ts";
+import type {
+  Diagnostic,
+  Entity,
+  ModelDocument,
+  SampleRecord,
+  Value,
+} from "./model.ts";
 import { makeId } from "./ui.ts";
 import type { Dispatch } from "./ui.ts";
 
@@ -7,15 +13,22 @@ export function SampleEditor({
   entity,
   document,
   dispatch,
+  diagnostics,
+  recordId,
+  onRecordChange,
+  practice,
 }: {
   entity: Entity;
   document: ModelDocument;
   dispatch: Dispatch;
+  diagnostics: Diagnostic[];
+  recordId?: string;
+  onRecordChange: (id: string) => void;
+  practice?: React.ReactNode;
 }) {
   const records = document.model.samples.filter(
     (s) => s.entityId === entity.id,
   );
-  const [recordId, setRecordId] = useState(records[0]?.id ?? "");
   const record = records.find((s) => s.id === recordId) ?? records[0];
   return (
     <>
@@ -33,7 +46,7 @@ export function SampleEditor({
                 sample: { id, entityId: entity.id, values: {} },
               })
             )
-              setRecordId(id);
+              onRecordChange(id);
           }}
         >
           ＋ Record
@@ -45,7 +58,7 @@ export function SampleEditor({
             Sample record
             <select
               value={record.id}
-              onChange={(event) => setRecordId(event.target.value)}
+              onChange={(event) => onRecordChange(event.target.value)}
             >
               {records.map((r) => (
                 <option key={r.id} value={r.id}>
@@ -54,13 +67,19 @@ export function SampleEditor({
               ))}
             </select>
           </label>
-          <RecordForm
-            key={`${record.id}-${JSON.stringify(record.values)}-${JSON.stringify(entity.fields)}`}
-            entity={entity}
-            record={record}
-            document={document}
-            dispatch={dispatch}
-          />
+          {record.id === "project_draft" && practice}
+          {records.map((item) => (
+            <div key={item.id} hidden={record.id !== item.id}>
+              <RecordForm
+                key={`${item.id}-${JSON.stringify(item.values)}-${JSON.stringify(entity.fields)}`}
+                entity={entity}
+                record={item}
+                document={document}
+                dispatch={dispatch}
+                diagnostics={diagnostics}
+              />
+            </div>
+          ))}
         </>
       ) : (
         <p className="empty-state">
@@ -75,9 +94,11 @@ function RecordForm({
   record,
   document,
   dispatch,
+  diagnostics,
 }: {
   entity: Entity;
   record: SampleRecord;
+  diagnostics: Diagnostic[];
   document: ModelDocument;
   dispatch: Dispatch;
 }) {
@@ -123,14 +144,25 @@ function RecordForm({
               (s) => s.entityId === relation.sourceEntityId,
             )
           : [];
+        const diagnostic = diagnostics.find(
+          (d) => d.recordId === record.id && d.fieldId === field.id,
+        );
+        const inputId = `sample:${record.id}:${field.id}`;
+        const accessibility = {
+          id: inputId,
+          "aria-label": `${field.name}${field.required ? " *" : ""} ${field.type}`,
+          "aria-invalid": diagnostic ? true : undefined,
+          "aria-describedby": diagnostic ? `${inputId}-error` : undefined,
+        };
         const invalidBoolean = !["", "true", "false"].includes(draft[field.id]);
         return (
-          <label key={field.id}>
+          <label key={field.id} className={diagnostic ? "invalid-field" : ""}>
             {field.name}
             {field.required ? " *" : ""}
             <span className="input-type">{field.type}</span>
             {field.type === "boolean" ? (
               <select
+                {...accessibility}
                 value={draft[field.id]}
                 onChange={(e) =>
                   setDraft({ ...draft, [field.id]: e.target.value })
@@ -147,8 +179,11 @@ function RecordForm({
               </select>
             ) : (
               <input
+                {...accessibility}
                 value={draft[field.id]}
-                list={relation ? `references-${field.id}` : undefined}
+                list={
+                  relation ? `references:${record.id}:${field.id}` : undefined
+                }
                 onChange={(e) =>
                   setDraft({ ...draft, [field.id]: e.target.value })
                 }
@@ -161,9 +196,14 @@ function RecordForm({
                 }
               />
             )}
+            {diagnostic && (
+              <small id={`${inputId}-error`} className="field-error">
+                {diagnostic.message}
+              </small>
+            )}
             {relation && (
               <>
-                <datalist id={`references-${field.id}`}>
+                <datalist id={`references:${record.id}:${field.id}`}>
                   {referenceRecords.map((r) => (
                     <option key={r.id} value={r.id} />
                   ))}
